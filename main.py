@@ -212,9 +212,20 @@ def dashboard():
     return render_template('dashboard.html', username=session['username'], subject_collection=user_subjects,
                            stats=stats)
 
+@app.route('/history')
+def study_history():
+    """Displays a complete history of all past study sessions."""
+    if 'user_id' not in session:
+        flash('Please log in to view your history.', 'warning')
+        return redirect(url_for('login'))
 
-# Keep all your other routes the same...
-# (I'm keeping the rest of your routes unchanged to save space)
+    # Find all sessions for the current user and sort them by end_time (newest first)
+    user_sessions = list(sessions_collection.find(
+        {'user_id': ObjectId(session['user_id'])}
+    ).sort('end_time', -1))
+
+    return render_template('history.html', sessions=user_sessions)
+
 
 @app.route('/study_session/<subject_name>')
 def study_session(subject_name):
@@ -324,6 +335,7 @@ def add_subject():
         'owner_id': session['user_id'],
         'subject': subject,
         'marks': marks,
+        'time_spent': total_minutes,
         'priority': priority,
         'category': category,
         'description': description,
@@ -336,35 +348,20 @@ def add_subject():
 
 
 @app.route('/update', methods=['POST'])
-def update():
+def update_subject():
     if 'user_id' not in session:
         return "Unauthorized", 401
 
     subject = request.form['subject'].lower()
     new_marks = int(request.form['marks'])
+    new_time = int(request.form['time_spent'])
     new_priority = request.form.get('priority')
     new_category = request.form.get('category')
 
     subjects_collection.update_one(
         {"subject": subject, "owner_id": session['user_id']},
-        {"$set": {"marks": new_marks, "priority": new_priority,"category":new_category}}
+        {"$set": {"marks": new_marks, "time_spent": new_time}}
     )
-    return "Success", 200
-
-
-@app.route('/delete', methods=['POST'])
-def delete():
-    if 'user_id' not in session:
-        return "Unauthorized", 401
-
-    subject = request.form['subject'].lower()
-
-
-    result = subjects_collection.delete_one({
-            "subject": subject,
-            "owner_id": session['user_id']
-        })
-
     return "Success", 200
 
 
@@ -621,7 +618,19 @@ def check_deadlines():
     return jsonify({"expiredTasks": expired_tasks})
 
 
+@app.route('/delete', methods=['POST'])
+def delete():
+    if 'user_id' not in session:
+        return "Unauthorized", 401
 
+    subject = request.form['subject'].lower()
+
+    subjects_collection.delete_one({
+        "subject": subject,
+        "owner_id": session['user_id']
+    })
+    user_subjects = list(subjects_collection.find({'owner_id': session['user_id']}))
+    return render_template('dashboard.html', username=session['username'], subject_collection=user_subjects)
 
 
 @app.route('/performance')
