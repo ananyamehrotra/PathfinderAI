@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PathfinderAI{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    {% block head_styles %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        <div class="header-card">
+            <h1>
+                <a href="{{ url_for('dashboard') }}" style="text-decoration: none; color: inherit;">PathfinderAI</a>
+            </h1>
+            <p>Welcome, {{ session.get('username', 'Guest') }}!</p>
+            <nav>
+                <a href="{{ url_for('dashboard') }}" class="btn-secondary">Dashboard</a>
+                <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
+            </nav>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="main-content-card">
+            {% block content %}
+            {% endblock %}
+        </div>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

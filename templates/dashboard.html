@@ -36,10 +36,7 @@
                     <a href="/time" class="btn btn-secondary">
                        Time Analytics
                     </a>
-
-
-
-
+                    <a href="{{ url_for('study_history') }}" class="btn btn-secondary">📜 Study History</a>
                     <button class="btn-todo" onclick="openTodoSidebar()">
                          Todo List
                     </button>
@@ -106,7 +103,7 @@
                             Update
                         </button>
                         <button class="btn-danger"
-                            onclick="confirmDelete('{{ subject.subject }}', '{{ loop.index0 }}')">
+                            onclick="confirmDelete('{{ subject.subject }}')">
                             Delete
                         </button>
                     </div>
@@ -117,7 +114,15 @@
                     <p><strong>Marks:</strong>
                         <span id="marks-display-{{ loop.index0 }}">{{ subject.marks }}</span>
                     </p>
-
+                    <p><strong>Time Spent:</strong>
+                        <span id="time-display-{{ loop.index0 }}">
+                            {% if subject.time_spent >= 60 %}
+                                {{ subject.time_spent // 60 }}h {{ subject.time_spent % 60 }}m
+                            {% else %}
+                                {{ subject.time_spent }}m
+                            {% endif %}
+                        </span>
+                    </p>
                     <p><strong>Priority:</strong>
                         <span id="priority{{ loop.index0 }}">{{ subject.priority }}</span>
                     </p>
@@ -136,6 +141,11 @@
                             <label>Marks:</label>
                             <input type="number" id="marks-input-{{ loop.index0 }}"
                                    value="{{ subject.marks }}" min="0" max="100" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Time Spent (minutes):</label>
+                            <input type="number" id="time-input-{{ loop.index0 }}"
+                                   value="{{ subject.time_spent }}" min="0" class="form-control">
                         </div>
                         <div class="form-group">
                             <label>Priority:</label>

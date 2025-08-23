@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+
+{% block title %}Study History{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 900px;">
+    <h1 class="text-center mb-4">Study Session History</h1>
+
+    {% if sessions %}
+        {% for session in sessions %}
+            <div class="subject-item">
+                <div class="subject-info">
+                    <h3>{{ session.subject_name|capitalize }}</h3>
+                    <p><strong>Week of:</strong> {{ session.week_start }}</p>
+
+                    {% set total_seconds = session.get('mon', 0) + session.get('tue', 0) + session.get('wed', 0) + session.get('thu', 0) + session.get('fri', 0) + session.get('sat', 0) + session.get('sun', 0) %}
+                    {% set hours = total_seconds // 3600 %}
+                    {% set minutes = (total_seconds % 3600) // 60 %}
+
+                    <p><strong>Total Time Studied this Week:</strong> {{ hours }}h {{ minutes }}m</p>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p class="text-center">No study history found.</p>
+    {% endif %}
+
+    <div class="text-center mt-4">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}
