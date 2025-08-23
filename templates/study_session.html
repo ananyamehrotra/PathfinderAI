@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Study Session: {{ subject_name|capitalize }}</title>
+     <link rel="stylesheet" href="{{ url_for('static', filename='css/session.css') }}">
+   <script src="{{ url_for('static', filename='js/session.js') }}" defer></script>
+
+
+
+</head>
+<body class="focus-mode">
+    <div class="main-container">
+        <!-- Timer Section -->
+        <div class="timer-section">
+            <div class="timer-card">
+                <h2 id="session-title">Focus Session 1</h2>
+                <h1 id="subject-title">{{ subject_name|capitalize }}</h1>
+
+                <div id="timer-display" class="editable" contenteditable="true" oninput="updateBreakInfo()">25:00</div>
+
+                <div class="timer-options" id="timer-options-div">
+                    <span id="break-info">You'll have 0 breaks</span>
+                    <label>
+                        <input type="checkbox" id="skip-breaks-checkbox"> Skip breaks
+                    </label>
+                </div>
+
+                <div class="timer-controls">
+                    <button id="start-pause-btn">Start</button>
+                    <button id="stop-btn">End & Save</button>
+                </div>
+                <p id="status-text">Click the time to edit, then press 'Start'.</p>
+            </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="chart-section">
+            <div class="chart-card">
+                <h3>Weekly Progress - {{ subject_name|capitalize }}</h3>
+                <div id="chart-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Plotly from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+
+    <script>
+        // --- DOM Elements ---
+        const timerDisplay = document.getElementById('timer-display');
+        const startPauseBtn = document.getElementById('start-pause-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const titleElement = document.querySelector('title');
+        const sessionTitle = document.getElementById('session-title');
+        const statusText = document.getElementById('status-text');
+        const bodyElement = document.querySelector('body');
+        const skipBreaksCheckbox = document.getElementById('skip-breaks-checkbox');
+        const breakInfo = document.getElementById('break-info');
+        const timerOptionsDiv = document.getElementById('timer-options-div');
+
+        // --- State Variables ---
+        let timer, secondsRemaining, focusDuration;
+        let isPaused = true;
+        let hasStartedOnce = false;
+        let isBreak = false;
+        let sessionCount = 0;
+        let totalTimeStudied = 0;
+        const subjectName = "{{ subject_name }}";
+        const POMODORO_LENGTH = 25 * 60;
+        const BREAK_DURATION = 5 * 60;
+
+        // Chart data storage
+        let currentChartData = {{ chart_data | tojson }};
+
+        // Create a simple beep sound
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        function playBeep() {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+        }
+
+        // --- Chart Functions ---
+        function createChart(data) {
+            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const trace = {
+                x: days,
+                y: data,
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: {
+                    color: '#4CAF50',
+                    width: 3
+                },
+                marker: {
+                    size: 8,
+                    color: '#4CAF50'
+                },
+                text: data.map(val => val.toFixed(1) + ' min'),
+                textposition: 'top center',
+                textfont: {
+                    size: 12,
+                    color: '#2c3e50'
+                }
+            };
+
+            const layout = {
+                title: {
+                    text: `Weekly Progress - ${subjectName}`,
+                    font: {
+                        size: 18,
+                        color: '#2c3e50'
+                    }
+                },
+                xaxis: {
+                    title: 'Days of the Week',
+                    color: '#7f8c8d'
+                },
+                yaxis: {
+                    title: 'Time Spent (minutes)',
+                    color: '#7f8c8d'
+                },
+                margin: {
+                    l: 60,
+                    r: 40,
+                    t: 60,
+                    b: 60
+                },
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                paper_bgcolor: 'rgba(0,0,0,0)'
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: false
+            };
+
+            Plotly.newPlot('chart-container', [trace], layout, config);
+        }
+
+        function updateChart() {
+            // Get today's index (0=Monday, 6=Sunday)
+            const today = new Date();
+            const todayIndex = (today.getDay() + 6) % 7; // Convert Sunday=0 to Monday=0
+
+            // Update the current day's data with the total time studied (in minutes)
+            currentChartData[todayIndex] += totalTimeStudied / 60;
+
+            // Recreate the chart with updated data
+            createChart(currentChartData);
+        }
+
+        // --- Event Listeners ---
+        startPauseBtn.addEventListener('click', toggleTimer);
+        stopBtn.addEventListener('click', endSession);
+
+        // --- Main Timer Logic ---
+        function runTimer() {
+            if (isPaused) return;
+            secondsRemaining--;
+            if (!isBreak) {
+                totalTimeStudied++;
+                // Update chart in real-time every minute
+                if (totalTimeStudied % 60 === 0) {
+                    updateChart();
+                }
+            }
+            updateDisplay();
+
+            if (secondsRemaining < 0) {
+                playBeep();
+                clearInterval(timer);
+
+                if (isBreak) {
+                    startFocus();
+                } else {
+                    sessionCount++;
+                    if (skipBreaksCheckbox.checked) {
+                        startFocus();
+                    } else {
+                        startBreak();
+                    }
+                }
+            }
+        }
+
+        // --- Control Functions ---
+        function toggleTimer() {
+            if (!hasStartedOnce) {
+                hasStartedOnce = true;
+                const timeParts = timerDisplay.textContent.split(':');
+                const minutes = parseInt(timeParts[0], 10);
+                const seconds = parseInt(timeParts[1], 10);
+                if (!isNaN(minutes) && !isNaN(seconds)) {
+                    focusDuration = (minutes * 60) + seconds;
+                } else {
+                    focusDuration = POMODORO_LENGTH;
+                }
+                secondsRemaining = focusDuration;
+                timerDisplay.contentEditable = false;
+                timerDisplay.classList.remove('editable');
+                timerOptionsDiv.style.display = 'none';
+            }
+
+            isPaused = !isPaused;
+            if (!isPaused) {
+                timer = setInterval(runTimer, 1000);
+                startPauseBtn.textContent = 'Pause';
+                statusText.textContent = isBreak ? "Enjoy your break!" : "Time to focus!";
+            } else {
+                clearInterval(timer);
+                startPauseBtn.textContent = 'Resume';
+                statusText.textContent = "Timer paused.";
+            }
+        }
+
+        function startFocus() {
+            isPaused = true;
+            isBreak = false;
+            secondsRemaining = focusDuration;
+            bodyElement.className = 'focus-mode';
+            sessionTitle.textContent = `Focus Session ${sessionCount + 1}`;
+            startPauseBtn.textContent = 'Start';
+            updateDisplay();
+        }
+
+        function startBreak() {
+            isPaused = true;
+            isBreak = true;
+            secondsRemaining = BREAK_DURATION;
+            bodyElement.className = 'break-mode';
+            sessionTitle.textContent = `Break Time!`;
+            startPauseBtn.textContent = 'Start Break';
+            updateDisplay();
+        }
+
+        async function endSession() {
+            clearInterval(timer);
+            if (totalTimeStudied > 0) {
+                statusText.textContent = 'Saving your session...';
+
+                // Update chart with final data
+                updateChart();
+
+                await logSessionToServer(totalTimeStudied);
+            }
+
+            // Small delay to show the updated chart before redirecting
+            setTimeout(() => {
+                window.location.href = "/dashboard"; // Update this to your actual dashboard URL
+            }, 1500);
+        }
+
+        async function logSessionToServer(durationInSeconds) {
+            try {
+                const response = await fetch("/log_session", { // Update this to your actual endpoint
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        subject_name: subjectName,
+                        duration_seconds: durationInSeconds
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    statusText.textContent = `Session saved! Studied for ${Math.round(durationInSeconds / 60)} minutes.`;
+                } else {
+                    console.error('Failed to log session.');
+                    statusText.textContent = 'Error saving session.';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                statusText.textContent = 'Error saving session.';
+            }
+        }
+
+        function updateDisplay() {
+            const minutes = Math.floor(secondsRemaining / 60);
+            const seconds = secondsRemaining % 60;
+            const displayString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            timerDisplay.textContent = displayString;
+            titleElement.textContent = `${displayString} - ${isBreak ? 'Break' : 'Focus'}`;
+        }
+
+        function updateBreakInfo() {
+            const timeParts = timerDisplay.textContent.split(':');
+            const minutes = parseInt(timeParts[0], 10);
+            if (!isNaN(minutes)) {
+                const numOfBreaks = Math.floor(minutes / (POMODORO_LENGTH / 60));
+                if (numOfBreaks > 1) {
+                    breakInfo.textContent = `You'll have ${numOfBreaks - 1} break${numOfBreaks - 1 > 1 ? 's' : ''}`;
+                } else {
+                    breakInfo.textContent = "No breaks in this session";
+                }
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            updateBreakInfo();
+            // Create initial chart
+            createChart(currentChartData);
+        });
+
+        // Prevent timer editing while running
+        timerDisplay.addEventListener('blur', function() {
+            if (hasStartedOnce) {
+                this.contentEditable = false;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <h1>Login</h1>
+
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="flash">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="/login">
+                <label>Email:</label>
+                <input type="email" name="email" required><br>
+
+                <label>Password:</label>
+                <input type="password" name="password" required id="password-input"><br>
+                <input type="checkbox" onclick="togglePasswordVisibility()"> Show Password<br><br>
+                <button type="submit">Login</button>
+            </form>
+
+            <a href="{{ url_for('google.login') }}">
+                <button type="button" class="btn-danger">Sign in with Google</button>
+            </a><br>
+
+            <a href="/register">Don't have an account? Register</a>
+        </div>
+    </div>
+</body>
+
+<script>
+function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('password-input');
+    if (passwordInput.type === "password") {
+        passwordInput.type = "text";
+    } else {
+        passwordInput.type = "password";
+    }
+}
+</script>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Performance Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { background-color: #E7EFC7; font-family: Arial; }
+        .chart { background-color: #AEC8A4; padding: 20px; margin: 20px; }
+        .list { background-color: white; margin: 20px; padding: 20px; }
+        .item { border-bottom: 1px solid #AEC8A4; padding: 10px; }
+        button { background-color: #8A784E; color: white; border: none; padding: 5px 10px; margin: 2px; }
+    </style>
+</head>
+<body>
+    <div class="chart">
+        {{ chart1|safe }}
+    </div>
+
+    <div class="list">
+        <h3>Subjects</h3>
+        {% for subject in subjects %}
+        <div class="item">
+            {{ subject.subject }} - {{ subject.marks }}% - {{ subject.time_spent }}m
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

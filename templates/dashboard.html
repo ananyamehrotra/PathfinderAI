@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Study Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+   <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+</head>
+
+<body>
+  <div class="dashboard">
+    <div class="container">
+        <!-- Header -->
+        <div class="header-card">
+            <h1>Welcome, {{ username }}!</h1>
+            <p>Manage your study subjects and track your progress</p>
+
+            <div class="success">
+                <p>✓ Successfully logged in!</p>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Grid -->
+        <div class="dashboard-grid">
+            <!-- Action Panel -->
+            <div class="action-panel">
+                <h2 class="panel-title">Quick Actions</h2>
+
+                <div class="btn-grid">
+                    <a href="/add_form" class="btn btn-primary">
+                        Add Subject
+                    </a>
+
+                    <a href="/performance" class="btn btn-secondary">
+                       View Performance
+                    </a>
+                    <a href="/time" class="btn btn-secondary">
+                       Time Analytics
+                    </a>
+
+
+
+
+                    <button class="btn-todo" onclick="openTodoSidebar()">
+                         Todo List
+                    </button>
+                </div>
+            </div>
+        </div>
+<!-- Updated Progress Dashboard Section -->
+<div class="progress-dashboard">
+    <h3>Progress Overview</h3>
+
+    <!-- Stats Summary -->
+    <div id="stats-summary" class="stats-summary">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="stat-number">0/0</span>
+                <span class="stat-label">Daily</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">0/0</span>
+                <span class="stat-label">Weekly</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number">0/0</span>
+                <span class="stat-label">Monthly</span>
+            </div>
+            <div class="stat-item overall">
+                <span class="stat-number">0%</span>
+                <span class="stat-label">Overall</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart Container -->
+    <div class="chart-container">
+        <div class="chart-card">
+            <h4>Goal Progress</h4>
+            <canvas id="goalChart" width="200" height="200"></canvas>
+        </div>
+    </div>
+
+</div>
+
+<!-- Chart.js Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+
+      <!-- Subjects List -->
+<div class="subjects-list">
+    <h2 class="panel-title">Your Subjects</h2>
+    {% if subject_collection %}
+        {% for subject in subject_collection %}
+            <div class="subject-item" id="subject-{{ loop.index0 }}">
+
+                <!-- Subject Header -->
+                <div class="subject-header">
+                    <!-- Subject name links to performance -->
+                   <a href="/study_session/{{ subject.subject }}" class="subject-name">
+
+                        {{ subject.subject|capitalize }}
+                    </a>
+                    <div class="subject-actions">
+                        <button class="btn-update"
+                            onclick="showUpdateForm('{{ loop.index0 }}')">
+                            Update
+                        </button>
+                        <button class="btn-danger"
+                            onclick="confirmDelete('{{ subject.subject }}')">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Subject Details -->
+                <div class="subject-details">
+                    <p><strong>Marks:</strong>
+                        <span id="marks-display-{{ loop.index0 }}">{{ subject.marks }}</span>
+                    </p>
+                    <p><strong>Time Spent:</strong>
+                        <span id="time-display-{{ loop.index0 }}">
+                            {% if subject.time_spent >= 60 %}
+                                {{ subject.time_spent // 60 }}h {{ subject.time_spent % 60 }}m
+                            {% else %}
+                                {{ subject.time_spent }}m
+                            {% endif %}
+                        </span>
+                    </p>
+                    <p><strong>Priority:</strong>
+                        <span id="priority{{ loop.index0 }}">{{ subject.priority }}</span>
+                    </p>
+                    <p><strong>Category:</strong>
+                        <span id="category{{ loop.index0 }}">{{ subject.category }}</span>
+                    </p>
+                    {% if subject.description %}
+                        <p><strong>Description:</strong> {{ subject.description }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Update Form (hidden initially) -->
+                <div class="update-form" id="update-form-{{ loop.index0 }}" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Marks:</label>
+                            <input type="number" id="marks-input-{{ loop.index0 }}"
+                                   value="{{ subject.marks }}" min="0" max="100" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Time Spent (minutes):</label>
+                            <input type="number" id="time-input-{{ loop.index0 }}"
+                                   value="{{ subject.time_spent }}" min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Priority:</label>
+                            <select id="priority-input-{{ loop.index0 }}">
+                                <option value="High" {% if subject.priority == "High" %}selected{% endif %}>High</option>
+                                <option value="Medium" {% if subject.priority == "Medium" %}selected{% endif %}>Medium</option>
+                                <option value="Low" {% if subject.priority == "Low" %}selected{% endif %}>Low</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Category:</label>
+                            <select id="category-input-{{ loop.index0 }}">
+                                <option value="core" {% if subject.category == "core" %}selected{% endif %}>Core</option>
+                                <option value="elective" {% if subject.category == "elective" %}selected{% endif %}>Elective</option>
+                                <option value="optional" {% if subject.category == "optional" %}selected{% endif %}>Optional</option>
+                                <option value="hobby" {% if subject.category == "hobby" %}selected{% endif %}>Hobby</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-buttons">
+                        <button class="btn-save" onclick="updateSubject('{{ loop.index0 }}', '{{ subject.subject }}')">Save</button>
+                        <button class="btn-cancel" onclick="hideUpdateForm('{{ loop.index0 }}')">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No subjects added yet.</p>
+    {% endif %}
+</div>
+
+
+<!-- ✅ Logout button is now fully OUTSIDE the loop -->
+<div class="logout-container">
+    <a href="/logout" class="logout">Logout</a>
+</div>
+
+
+<!-- Todo List Sidebar -->
+<div class="todo-panel">
+<div class="todo-overlay" id="todoOverlay" onclick="closeTodoSidebar()"></div>
+<div class="todo-sidebar" id="todoSidebar">
+    <div class="todo-header">
+        <h3>My ToDos</h3>
+        <button class="todo-close" onclick="closeTodoSidebar()">×</button>
+    </div>
+
+    <div class="todo-input-section">
+        <div class="todo-input-container">
+
+            <!-- Task input -->
+            <input
+                type="text"
+                id="todoInput"
+                class="todo-input"
+                placeholder="Enter a new task..."
+                maxlength="200"
+                onkeypress="handleTodoKeyPress(event)"
+            >
+
+
+            <!-- Goal period dropdown -->
+            <select id="todoGoalPeriod" class="todo-input">
+                <option value="">-- Goal Period --</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+
+            </select>
+
+
+
+            <!-- Add Button -->
+            <button class="todo-add-btn" id="todoAddBtn" onclick="addTodoItem()">
+                Add Task
+            </button>
+        </div>
+
+        <div class="todo-list" id="todoList">
+            <div class="todo-empty">
+                No tasks yet. Add one above!
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete "<span id="deleteSubjectName"></span>"?</p>
+            <div class="modal-buttons">
+                <button class="btn-delete" onclick="deleteSubject()">Yes, Delete</button>
+                <button class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+<!-- Calendar Button -->
+<div id="calendarOverlay"></div>
+
+<!-- Calendar Button -->
+<button class="calendar-btn" onclick="toggleCalendar()">
+    📅
+</button>
+
+<!-- Calendar Popup -->
+<div id="calendar">
+    <div class="calendar-header">
+        <h3>Calendar & Reminders</h3>
+        <button class="calendar-close" onclick="closeCalendar()">&times;</button>
+    </div>
+    <div class="calendar-body">
+        <div id="calendarContent"></div>
+    </div>
+</div>
+</div>
+<!-- FullCalendar Script -->
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
+
+
+    </div>
+</body>
+</html>

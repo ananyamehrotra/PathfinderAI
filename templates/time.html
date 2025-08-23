@@ -1,0 +1,29 @@
+<html><head>
+    <title>Time Tracking - PathfinderAI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script><style id="plotly.js-style-global"></style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-card">
+            <h1>Time Analytics</h1>
+            <p>How your study time is distributed.</p>
+        </div>
+        <div class="card" style="max-width: 900px;">
+            {{ chart2|safe }}
+        </div>
+        <div class="summary-card">
+    {% if max_subject and min_subject %}
+        <p><strong>Most time spent on:</strong> {{ max_subject.name }} ({{ max_subject.hours }} hrs)</p>
+        <p><strong>Least time spent on:</strong> {{ min_subject.name }} ({{ min_subject.hours }} hrs)</p>
+    {% else %}
+        <p>No study data available.</p>
+    {% endif %}
+</div>
+
+        <div class="logout-container">
+            <a href="{{ url_for('dashboard') }}" class="logout">Back to Dashboard</a>
+        </div>
+    </div>
+
+</body></html>

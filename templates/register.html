@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Register</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+        <div class="login-container">
+             <div class="login-card">
+        <h1>Register</h1>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="flash error">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/register">
+            <label>Username:</label>
+            <input type="text" name="username" required><br>
+
+            <label>Email:</label>
+            <input type="email" name="email" required><br>
+
+            <label>Password:</label>
+            <input type="password" name="password" required id="password-input"><br>
+            <input type="checkbox" onclick="togglePasswordVisibility()"> Show Password<br><br>
+            <button type="submit" class="secondary">Register</button>
+        </form>
+
+        <a href="/login">Already have an account? Login</a>
+        </div></div>
+</body>
+<script>
+    function togglePasswordVisibility() {
+    // Step A: Find the password input field on the page using its ID
+    const passwordInput = document.getElementById('password-input');
+
+    // Step B: Check what type the input field currently is
+    if (passwordInput.type === "password") {
+        // Step C: If it's a password (hidden), change its type to text (visible)
+        passwordInput.type = "text";
+    } else {
+        // Step D: If it's already text, change it back to a password (hidden)
+        passwordInput.type = "password";
+    }
+}
+</script>
+</html>
