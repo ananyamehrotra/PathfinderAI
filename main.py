@@ -466,7 +466,7 @@ def add_goal():
         return redirect(url_for('login'))
 
     subject_id = request.form.get('subject_id')
-    target_duration = int(request.form.get('target_duration')) # Assuming hours for now
+    target_duration = float(request.form.get('target_duration')) # Assuming hours for now
     period = request.form.get('period')
 
     # Calculate start and end dates for the goal
@@ -735,4 +735,5 @@ def logout():
 
 
 if __name__ == '__main__':
+
     app.run(debug=True)
