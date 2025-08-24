@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Set a New Goal</title>
+    <style>
+        /* Basic styles to make the page look clean */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #E7EFC7;
+            color: #3B3B1A;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(59, 59, 26, 0.2);
+            border: 2px solid #AEC8A4;
+            max-width: 600px;
+            margin: 20px auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #AEC8A4;
+            border-radius: 5px;
+            font-size: 16px;
+            background-color: #E7EFC7;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            background-color: #8A784E;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        a.link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #8A784E;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Set a Time-Based Goal</h1>
+        <form action="{{ url_for('add_goal') }}" method="POST">
+            <div class="form-group">
+                <label for="subject_id">Which subject do you want to set a goal for?</label>
+                <select id="subject_id" name="subject_id" required>
+                    <option value="" disabled selected>Select a subject...</option>
+                    {% for subject in subjects %}
+                        <option value="{{ subject._id }}">{{ subject.subject|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="target_duration">How many hours do you want to study?</label>
+                <input type="number" id="target_duration" name="target_duration" required min="1" step="0.5">
+            </div>
+            <div class="form-group">
+                <label for="period">Over what period?</label>
+                <select id="period" name="period" required>
+                    <option value="weekly" selected>This Week</option>
+                    <option value="monthly">This Month</option>
+                </select>
+            </div>
+            <button type="submit">Set Goal</button>
+        </form>
+        <a href="{{ url_for('dashboard') }}" class="link">Back to Dashboard</a>
+    </div>
+</body>
+</html>

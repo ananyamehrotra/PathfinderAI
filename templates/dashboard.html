@@ -26,23 +26,25 @@
                 <h2 class="panel-title">Quick Actions</h2>
 
                 <div class="btn-grid">
-                    <a href="/add_form" class="btn btn-primary">
+                    <a href="{{ url_for('add_form') }}" class="btn btn-primary">
                         Add Subject
                     </a>
 
-                    <a href="/performance" class="btn btn-secondary">
+                    <a href="{{ url_for('performance') }}" class="btn btn-secondary">
                        View Performance
                     </a>
-                    <a href="/time" class="btn btn-secondary">
+                    <a href="{{ url_for('time') }}" class="btn btn-secondary">
                        Time Analytics
                     </a>
                     <a href="{{ url_for('study_history') }}" class="btn btn-secondary">📜 Study History</a>
                     <button class="btn-todo" onclick="openTodoSidebar()">
                          Todo List
                     </button>
+
                 </div>
             </div>
         </div>
+
 <!-- Updated Progress Dashboard Section -->
 <div class="progress-dashboard">
     <h3>Progress Overview</h3>
@@ -77,6 +79,28 @@
         </div>
     </div>
 
+    <div class="card mt-4" style="border: none; box-shadow: none;">
+            <h2 class="text-center">Active Time Goals</h2>
+            {% if time_goals %}
+                {% for goal in time_goals %}
+                    <div class="mb-3">
+                        <p class="mb-1">
+                            <strong>{{ goal.subject_name|capitalize }}</strong>:
+                            {{ goal.current_duration_minutes|round|int }} of {{ goal.target_duration_minutes }} minutes
+                        </p>
+                        <div class="progress" style="height: 20px;">
+                            {% set percentage = (goal.current_duration_minutes / goal.target_duration_minutes) * 100 %}
+                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ percentage }}%;" aria-valuenow="{{ percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                {{ percentage|round|int }}%
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-center text-muted">No active time-based goals. <a href="{{ url_for('add_goal_form') }}">Set one now!</a></p>
+            {% endif %}
+        </div>
+
 </div>
 
 <!-- Chart.js Scripts -->
@@ -93,7 +117,7 @@
                 <!-- Subject Header -->
                 <div class="subject-header">
                     <!-- Subject name links to performance -->
-                   <a href="/study_session/{{ subject.subject }}" class="subject-name">
+                   <a href="{{ url_for('study_session', subject_name=subject.subject) }}" class="subject-name">
 
                         {{ subject.subject|capitalize }}
                     </a>
@@ -180,7 +204,7 @@
 
 <!-- ✅ Logout button is now fully OUTSIDE the loop -->
 <div class="logout-container">
-    <a href="/logout" class="logout">Logout</a>
+    <a href="{{ url_for('logout') }}" class="logout">Logout</a>
 </div>
 
 

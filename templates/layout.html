@@ -10,14 +10,12 @@
 <body>
     <div class="container">
         <div class="header-card">
+            {% block header_content %}
             <h1>
                 <a href="{{ url_for('dashboard') }}" style="text-decoration: none; color: inherit;">PathfinderAI</a>
             </h1>
             <p>Welcome, {{ session.get('username', 'Guest') }}!</p>
-            <nav>
-                <a href="{{ url_for('dashboard') }}" class="btn-secondary">Dashboard</a>
-                <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
-            </nav>
+            {% endblock %}
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -33,7 +31,9 @@
             {% endblock %}
         </div>
     </div>
-
+    <div class="text-center mt-4">
+                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
     {% block scripts %}{% endblock %}
 </body>
 </html>
