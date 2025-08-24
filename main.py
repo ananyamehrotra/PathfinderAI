@@ -209,6 +209,8 @@ def dashboard():
                 if completed:
                     stats[period]["completed"] += 1
 
+
+
     return render_template('dashboard.html', username=session['username'], subject_collection=user_subjects,
                            stats=stats)
 
@@ -259,6 +261,7 @@ def study_session(subject_name):
     )
 
 
+# In main.py
 @app.route('/log_session', methods=['POST'])
 def log_session():
     if 'user_id' not in session:
@@ -271,44 +274,46 @@ def log_session():
     if not subject_name or duration_seconds is None:
         return jsonify({'status': 'error', 'message': 'Missing required data'}), 400
 
-    local_today = datetime.now()
-    today_str = local_today.strftime("%a").lower()
-    week_start = local_today - timedelta(days=local_today.weekday())
-
     subject = subjects_collection.find_one({
         "owner_id": session['user_id'],
         "subject": subject_name.lower()
     })
+
     if not subject:
         return jsonify({'status': 'error', 'message': 'Subject not found'}), 404
 
-    weekly_doc = sessions_collection.find_one({
-        "user_id": ObjectId(session['user_id']),
-        "subject_id": subject['_id'],
-        "week_start": week_start.date().isoformat()
-    })
+    # --- This part is the same as before ---
+    session_data = {
+        'user_id': ObjectId(session['user_id']),
+        'subject_id': subject['_id'],
+        'subject_name': subject_name,
+        'duration_seconds': int(duration_seconds),
+        'end_time': datetime.utcnow(),
+        'session_type': 'Pomodoro'
+    }
+    sessions_collection.insert_one(session_data)
 
-    if not weekly_doc:
-        weekly_doc = {
-            "user_id": ObjectId(session['user_id']),
-            "subject_id": subject['_id'],
-            "subject_name": subject_name,
-            "week_start": week_start.date().isoformat(),
-            "mon": 0, "tue": 0, "wed": 0,
-            "thu": 0, "fri": 0, "sat": 0, "sun": 0
-        }
-        sessions_collection.insert_one(weekly_doc)
+    # --- NEW LOGIC: Automatically update goal progress ---
+    now = datetime.utcnow()
+    duration_minutes = int(duration_seconds) / 60
 
-    sessions_collection.update_one(
+    # Find an active time-based goal for this subject and update it
+    goals_collection.update_one(
         {
-            "user_id": ObjectId(session['user_id']),
-            "subject_id": subject['_id'],
-            "week_start": week_start.date().isoformat()
+            'user_id': ObjectId(session['user_id']),
+            'subject_id': subject['_id'],
+            'goal_type': 'time',
+            'status': 'active',
+            'start_date': {'$lte': now},
+            'end_date': {'$gte': now}
         },
-        {"$inc": {today_str: int(duration_seconds)}}
+        {
+            '$inc': {'current_duration_minutes': duration_minutes}
+        }
     )
+    # ---------------------------------------------------
 
-    return jsonify({'status': 'success', 'message': f'Session logged to {today_str} successfully!'})
+    return jsonify({'status': 'success', 'message': 'Session logged successfully!'})
 
 
 @app.route('/add_form')
@@ -443,6 +448,52 @@ def time():
                            min_subject=min_subject,
                            subjects=subjects)
 
+
+# In main.py
+@app.route('/add_goal_form')
+def add_goal_form():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    # Fetch user's subjects to show in the dropdown
+    subjects = list(subjects_collection.find({'owner_id': session['user_id']}))
+    return render_template('add_goal.html', subjects=subjects)
+
+# In main.py
+@app.route('/add_goal', methods=['POST'])
+def add_goal():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    subject_id = request.form.get('subject_id')
+    target_duration = int(request.form.get('target_duration')) # Assuming hours for now
+    period = request.form.get('period')
+
+    # Calculate start and end dates for the goal
+    today = datetime.utcnow()
+    if period == 'weekly':
+        start_date = today - timedelta(days=today.weekday()) # Monday
+        end_date = start_date + timedelta(days=6) # Sunday
+    else: # monthly
+        start_date = today.replace(day=1)
+        # Find the last day of the month
+        next_month = start_date.replace(day=28) + timedelta(days=4)
+        end_date = next_month - timedelta(days=next_month.day)
+
+    goal_data = {
+        'user_id': ObjectId(session['user_id']),
+        'subject_id': ObjectId(subject_id),
+        'goal_type': 'time',
+        'target_duration_minutes': target_duration * 60, # Convert hours to minutes
+        'current_duration_minutes': 0,
+        'start_date': start_date.replace(hour=0, minute=0, second=0),
+        'end_date': end_date.replace(hour=23, minute=59, second=59),
+        'status': 'active'
+    }
+
+    goals_collection.insert_one(goal_data)
+    flash('New time-based goal has been set!', 'success')
+    return redirect(url_for('dashboard'))
 
 @app.route("/todo_stats")
 def todo_stats():
