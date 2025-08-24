@@ -18,19 +18,24 @@ function hideUpdateForm(index) {
 
 function updateSubject(index, subject) {
     const newMarks = document.getElementById('marks-input-' + index).value;
+    const newTime = parseInt(document.getElementById('time-input-' + index).value) || 0; // ✅ ensure integer minutes
     const newPriority = document.getElementById('priority-input-' + index).value;
     const newCategory = document.getElementById('category-input-' + index).value;
 
     const formData = new FormData();
     formData.append('subject', subject.toLowerCase());
     formData.append('marks', newMarks);
+    formData.append('time_spent', newTime);  // ✅ now always minutes
     formData.append('priority', newPriority);
     formData.append('category', newCategory);
 
-    fetch("/update", { method: 'POST', body: formData })
+    fetch("{{ url_for('update_subject') }}", { method: 'POST', body: formData })
     .then(response => {
         if (response.ok) {
+            const hours = Math.floor(newTime / 60);
+            const minutes = newTime % 60;
             document.getElementById('marks-display-' + index).textContent = newMarks;
+            document.getElementById('time-display-' + index).textContent = `${hours}h ${minutes}m`; // ✅ fixed template literal
             document.getElementById('priority' + index).textContent = newPriority;
             document.getElementById('category' + index).textContent = newCategory;
             hideUpdateForm(index);
@@ -58,10 +63,10 @@ function updateSubject(index, subject) {
         const formData = new FormData();
         formData.append('subject', subjectToDelete.toLowerCase());
 
-        fetch("/delete", { method: 'POST', body: formData })
+        fetch("{{ url_for('delete_subject') }}", { method: 'POST', body: formData })
         .then(response => {
             if (response.ok) {
-                document.getElementById('subject-' + subjectIndexToDelete).remove();
+                document.getElementById('subject-item-' + subjectIndexToDelete).remove();
             } else {
                 alert('Failed to delete subject.');
             }
