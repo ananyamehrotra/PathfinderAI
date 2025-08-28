@@ -1,8 +1,11 @@
 import os
-
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 import plotly.express as px
 import pytz
+import requests
+import secrets
+import json
+from urllib.parse import urlencode
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
 from pymongo import MongoClient
 import pandas as pd
@@ -10,23 +13,26 @@ from flask_bcrypt import Bcrypt
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from bson import ObjectId
-from flask_dance.contrib.google import make_google_blueprint, google
+from werkzeug.utils import secure_filename
+from flask import send_from_directory
 
 # Load environment variables first
 load_dotenv()
 
 # Create Flask app
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'uploads'
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'docx', 'pptx'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 
-# FIXED: Proper Google OAuth blueprint configuration
-google_bp = make_google_blueprint(
-    client_id=os.getenv('GOOGLE_OAUTH_CLIENT_ID'),
-    client_secret=os.getenv('GOOGLE_OAUTH_CLIENT_SECRET'),
-    scope=["openid", "email", "profile"]
-)
 
-app.register_blueprint(google_bp, url_prefix="/login")
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_OAUTH_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_OAUTH_CLIENT_SECRET')
+GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid_configuration"
 
 # MongoDB setup (keeping your existing setup)
 MONGO_URI = os.environ.get('url')
@@ -43,54 +49,170 @@ try:
     goals_collection = db.goals
     sessions_collection = db.sessions
     reminders_collection = db.reminders
+    files_collection = db.files
     client.admin.command('ping')
     print("MongoDB connection successful.")
 except Exception as e:
     print(f"Could not connect to MongoDB: {e}")
     db = None
     users_collection = None
+    subjects_collection = None
     activities_collection = None
+    goals_collection = None
+    sessions_collection = None
+    reminders_collection = None
+    files_collection = None
 
 bcrypt = Bcrypt(app)
 
+def get_google_provider_cfg():
+    """Get Google's OAuth configuration"""
+    try:
+        response = requests.get(GOOGLE_DISCOVERY_URL)
+        return response.json()
+    except:
+        # Fallback configuration
+        return {
+            "authorization_endpoint": "https://accounts.google.com/o/oauth2/auth",
+            "token_endpoint": "https://oauth2.googleapis.com/token",
+            "userinfo_endpoint": "https://openidconnect.googleapis.com/v1/userinfo"
+        }
 
-# Debug route to check redirect URI
+@app.route('/')
+def home():
+    return redirect(url_for('login'))
+
+# Debug route to check OAuth configuration
 @app.route('/debug-oauth')
 def debug_oauth():
-    redirect_uri = url_for('google.authorized', _external=True)
+    redirect_uri = 'http://127.0.0.1:5000/auth/callback'  # Fixed
     return f"""
-    <h3>Debug OAuth Info:</h3>
+    <h2>OAuth Debug Info</h2>
     <p><strong>Redirect URI:</strong> {redirect_uri}</p>
-    <p><strong>Client ID:</strong> {os.getenv('GOOGLE_OAUTH_CLIENT_ID')}</p>
-    <p>Add this exact redirect URI to your Google Cloud Console!</p>
+    <p><strong>Client ID:</strong> {GOOGLE_CLIENT_ID}</p>
+    <p><strong>Add this exact redirect URI to your Google Cloud Console!</strong></p>
+    <hr>
+    <p>In Google Cloud Console:</p>
+    <ol>
+        <li>Go to APIs & Services → Credentials</li>
+        <li>Click your OAuth 2.0 Client ID</li>
+        <li>Add this redirect URI: <strong>{redirect_uri}</strong></li>
+        <li>Save changes</li>
+    </ol>
     """
 
-
-# FIXED: Proper Google OAuth route
-@app.route("/auth/google")
+@app.route('/auth/google')
 def google_login():
-    if not google.authorized:
-        return redirect(url_for("google.login"))
-
+    """Initiate Google OAuth flow"""
     try:
-        resp = google.get("/oauth2/v2/userinfo")
-        if not resp.ok:
-            flash("Failed to fetch user info from Google.", "error")
-            return redirect(url_for("login"))
+        # Generate state for CSRF protection
+        state = secrets.token_urlsafe(32)
+        session['oauth_state'] = state
 
-        user_info = resp.json()
-        email = user_info.get("email")
-        name = user_info.get("name", "Google User")
+        # Get Google's configuration
+        google_provider_cfg = get_google_provider_cfg()
+        authorization_endpoint = google_provider_cfg["authorization_endpoint"]
+
+        # FIXED: Force 127.0.0.1 in redirect URI to match Google Console
+        redirect_uri = 'http://127.0.0.1:5000/auth/callback'
+
+        # Prepare the authorization URL
+        params = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'redirect_uri': redirect_uri,
+            'scope': 'openid email profile',
+            'response_type': 'code',
+            'state': state,
+            'access_type': 'offline',
+            'prompt': 'consent'
+        }
+
+        authorization_url = authorization_endpoint + '?' + urlencode(params)
+        print(f"Redirecting to: {authorization_url}")
+
+        return redirect(authorization_url)
+
+    except Exception as e:
+        print(f"Error in google_login: {e}")
+        flash("Error initiating Google login", "error")
+        return redirect(url_for('login'))
+
+@app.route('/auth/callback')
+def callback():
+    """Handle Google OAuth callback"""
+    try:
+        print("=== OAuth Callback Started ===")
+
+        # Verify state parameter
+        if request.args.get('state') != session.get('oauth_state'):
+            print("State mismatch!")
+            flash("Invalid state parameter", "error")
+            return redirect(url_for('login'))
+
+        # Get authorization code
+        code = request.args.get('code')
+        if not code:
+            print("No authorization code received")
+            flash("Authorization failed", "error")
+            return redirect(url_for('login'))
+
+        print(f"Authorization code received: {code[:20]}...")
+
+        # Get Google's configuration
+        google_provider_cfg = get_google_provider_cfg()
+        token_endpoint = google_provider_cfg["token_endpoint"]
+
+        # FIXED: Use same redirect URI format as in authorization
+        redirect_uri = 'http://127.0.0.1:5000/auth/callback'
+
+        # Exchange code for tokens
+        token_data = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'client_secret': GOOGLE_CLIENT_SECRET,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'redirect_uri': redirect_uri
+        }
+
+        print("Exchanging code for tokens...")
+        token_response = requests.post(token_endpoint, data=token_data)
+
+        if not token_response.ok:
+            print(f"Token exchange failed: {token_response.text}")
+            flash("Failed to exchange authorization code", "error")
+            return redirect(url_for('login'))
+
+        tokens = token_response.json()
+        print("Tokens received successfully")
+
+        # Get user info
+        userinfo_endpoint = google_provider_cfg["userinfo_endpoint"]
+        headers = {'Authorization': f'Bearer {tokens["access_token"]}'}
+
+        print("Fetching user info...")
+        user_response = requests.get(userinfo_endpoint, headers=headers)
+
+        if not user_response.ok:
+            print(f"Failed to get user info: {user_response.text}")
+            flash("Failed to get user information", "error")
+            return redirect(url_for('login'))
+
+        user_info = user_response.json()
+        print(f"User info received: {user_info}")
+
+        email = user_info.get('email')
+        name = user_info.get('name', 'Google User')
 
         if not email:
-            flash("Failed to get email from Google.", "error")
-            return redirect(url_for("login"))
+            print("No email in user info")
+            flash("Failed to get email from Google", "error")
+            return redirect(url_for('login'))
 
         # Check if user exists in database
         user = users_collection.find_one({"email": email})
 
         if not user:
-            # Register new Google user automatically
+            # Register new Google user
             user_data = {
                 "username": name,
                 "email": email,
@@ -100,25 +222,32 @@ def google_login():
             }
             result = users_collection.insert_one(user_data)
             user = users_collection.find_one({"_id": result.inserted_id})
+            print(f"New user created: {email}")
+        else:
+            print(f"Existing user found: {email}")
 
-        # Set session properly
-        session["user_id"] = str(user["_id"])
-        session["username"] = user["username"]
+        # Set session
+        session['user_id'] = str(user['_id'])
+        session['username'] = user['username']
         session.permanent = True
 
-        flash("Successfully logged in with Google!", "success")
-        return redirect(url_for("dashboard"))
+        # Clean up OAuth state
+        session.pop('oauth_state', None)
+
+        print(f"Login successful for: {name}")
+        flash(f"Successfully logged in as {name}!", "success")
+        return redirect(url_for('dashboard'))
 
     except Exception as e:
-        print(f"Google OAuth error: {e}")
-        flash("An error occurred during Google login.", "error")
-        return redirect(url_for("login"))
+        print(f"=== OAuth Callback Error ===")
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        print("=== End Error ===")
 
-
-@app.route('/')
-def home():
-    return redirect(url_for('login'))
-
+        session.pop('oauth_state', None)
+        flash("An error occurred during Google login", "error")
+        return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -132,26 +261,23 @@ def register():
         password = request.form.get('password')
 
         existing_user = users_collection.find_one({'email': email})
-
         if existing_user:
             flash('Email already registered!', 'error')
             return redirect(url_for('register'))
 
         hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
-
         users_collection.insert_one({
             'username': username,
             'email': email,
-            'password': hashed_password
+            'password': hashed_password,
+            'auth_provider': 'local',
+            'created_at': datetime.utcnow()
         })
-        user = users_collection.find_one({'email': email})
-        session['user_id'] = str(user['_id'])
-        session['username'] = username
+
         flash('Registration successful! Login with the new ID', 'success')
         return redirect(url_for('login'))
 
     return render_template('register.html')
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -164,7 +290,6 @@ def login():
         password = request.form.get('password')
 
         user = users_collection.find_one({'email': email})
-
         if user and bcrypt.check_password_hash(user['password'], password):
             session['user_id'] = str(user['_id'])
             session['username'] = user['username']
@@ -176,14 +301,13 @@ def login():
 
     return render_template('login.html')
 
-
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
         flash('Please log in to access this page.', 'warning')
         return redirect(url_for('login'))
 
-    user_id = session['user_id']
+    user_id_obj = ObjectId(session['user_id'])
 
     if activities_collection is not None:
         activities_collection.insert_one({
@@ -209,24 +333,29 @@ def dashboard():
                 if completed:
                     stats[period]["completed"] += 1
 
+        time_goals = list(goals_collection.find({
+            'user_id': user_id_obj,
+            'goal_type': 'time',
+            'status': 'active'
+        }))
+
+        for goal in time_goals:
+            subject = subjects_collection.find_one({'_id': goal.get('subject_id')})
+            if subject:
+                goal['subject_name'] = subject.get('subject', 'Unknown Subject')
+
+        user_subjects = list(subjects_collection.find({'owner_id': session['user_id']}))
+
+        for subject in user_subjects:
+            subject_id_obj = subject['_id']
+            subject['files'] = list(files_collection.find({'subject_id': subject_id_obj}))
 
 
-    return render_template('dashboard.html', username=session['username'], subject_collection=user_subjects,
-                           stats=stats)
-
-@app.route('/history')
-def study_history():
-    """Displays a complete history of all past study sessions."""
-    if 'user_id' not in session:
-        flash('Please log in to view your history.', 'warning')
-        return redirect(url_for('login'))
-
-    # Find all sessions for the current user and sort them by end_time (newest first)
-    user_sessions = list(sessions_collection.find(
-        {'user_id': ObjectId(session['user_id'])}
-    ).sort('end_time', -1))
-
-    return render_template('history.html', sessions=user_sessions)
+        return render_template('dashboard.html',
+                               username=session['username'],
+                               subject_collection=user_subjects,
+                               stats=stats,
+                               time_goals=time_goals)
 
 
 @app.route('/study_session/<subject_name>')
@@ -238,30 +367,59 @@ def study_session(subject_name):
     local_today = datetime.now()
     week_start = local_today - timedelta(days=local_today.weekday())
 
+    # Get session doc
     doc = sessions_collection.find_one({
         "user_id": ObjectId(session['user_id']),
         "subject_name": subject_name,
         "week_start": week_start.date().isoformat()
     })
 
+    # Get the subject
+    subject = subjects_collection.find_one({
+        "owner_id": session['user_id'],
+        "subject": subject_name.lower()
+    })
+
+    # Attach files for this subject
+    if subject:
+        original_subject_id = subject['_id']
+        subject['_id'] = str(subject['_id'])
+        subject['name'] = subject['subject']  # For template compatibility
+
+        # Find files using original ObjectId
+        files = list(files_collection.find({'subject_id': original_subject_id}))
+
+        # Convert file ObjectIds to strings for template use
+        for file in files:
+            file['_id'] = str(file['_id'])
+            if 'subject_id' in file:
+                file['subject_id'] = str(file['subject_id'])
+
+        subject['files'] = files
+    else:
+        subject = {"name": subject_name, "files": []}
+
     days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
     if not doc:
         time_spent = [0] * 7
+        productive_hours = {}
     else:
         time_spent = [doc.get(day, 0) for day in days]
+        productive_hours = doc.get("productive_hours", {})
 
     chart_data = [t / 60 for t in time_spent]
 
     return render_template(
-        'study_session.html',
+        "study_session.html",
+        subject=subject,
         subject_name=subject_name,
         chart_data=chart_data,
-        days=days
+        days=days,
+        productive_hours=productive_hours
     )
 
 
-# In main.py
 @app.route('/log_session', methods=['POST'])
 def log_session():
     if 'user_id' not in session:
@@ -274,6 +432,29 @@ def log_session():
     if not subject_name or duration_seconds is None:
         return jsonify({'status': 'error', 'message': 'Missing required data'}), 400
 
+    duration_seconds = int(duration_seconds)
+    local_today = datetime.now()
+    today_str = local_today.strftime("%a").lower()
+    week_start = local_today - timedelta(days=local_today.weekday())
+
+    start_time = datetime.now()
+    end_time = start_time + timedelta(seconds=duration_seconds)
+
+    # Productive hours calculation
+    current = start_time
+    remaining = duration_seconds
+    updates = {}
+
+    while current < end_time and remaining > 0:
+        hour_key = str(current.hour).zfill(2)
+        seconds_left_in_hour = (60 - current.minute) * 60 - current.second
+        seconds_to_add = min(remaining, seconds_left_in_hour)
+        updates[f"productive_hours.{hour_key}"] = updates.get(f"productive_hours.{hour_key}", 0) + (
+                    seconds_to_add // 60)
+        remaining -= seconds_to_add
+        current += timedelta(seconds=seconds_to_add)
+
+    # Find subject
     subject = subjects_collection.find_one({
         "owner_id": session['user_id'],
         "subject": subject_name.lower()
@@ -282,22 +463,45 @@ def log_session():
     if not subject:
         return jsonify({'status': 'error', 'message': 'Subject not found'}), 404
 
-    # --- This part is the same as before ---
-    session_data = {
-        'user_id': ObjectId(session['user_id']),
-        'subject_id': subject['_id'],
-        'subject_name': subject_name,
-        'duration_seconds': int(duration_seconds),
-        'end_time': datetime.utcnow(),
-        'session_type': 'Pomodoro'
-    }
-    sessions_collection.insert_one(session_data)
+    # Get or create weekly doc
+    weekly_doc = sessions_collection.find_one({
+        "user_id": ObjectId(session['user_id']),
+        "subject_id": subject['_id'],
+        "week_start": week_start.date().isoformat()
+    })
 
-    # --- NEW LOGIC: Automatically update goal progress ---
+    if not weekly_doc:
+        weekly_doc = {
+            "user_id": ObjectId(session['user_id']),
+            "subject_id": subject['_id'],
+            "subject_name": subject_name,
+            "week_start": week_start.date().isoformat(),
+            "mon": 0, "tue": 0, "wed": 0,
+            "thu": 0, "fri": 0, "sat": 0, "sun": 0,
+            "productive_hours": {str(h).zfill(2): 0 for h in range(24)},
+            'created_at': datetime.utcnow()
+        }
+        sessions_collection.insert_one(weekly_doc)
+
+    # Update study time + productive hours
+    sessions_collection.update_one(
+        {
+            "user_id": ObjectId(session['user_id']),
+            "subject_id": subject['_id'],
+            "week_start": week_start.date().isoformat()
+        },
+        {
+            "$inc": {
+                today_str: duration_seconds // 60,
+                **updates
+            }
+        }
+    )
+
     now = datetime.utcnow()
     duration_minutes = int(duration_seconds) / 60
 
-    # Find an active time-based goal for this subject and update it
+    # Update time-based goals
     goals_collection.update_one(
         {
             'user_id': ObjectId(session['user_id']),
@@ -309,11 +513,9 @@ def log_session():
         },
         {
             '$inc': {'current_duration_minutes': duration_minutes}
-        }
-    )
-    # ---------------------------------------------------
+        })
 
-    return jsonify({'status': 'success', 'message': 'Session logged successfully!'})
+    return jsonify({'status': 'success', 'message': f'Session logged to {today_str} successfully!'})
 
 
 @app.route('/add_form')
@@ -328,19 +530,14 @@ def add_subject():
 
     subject = request.form['subject'].lower()
     marks = int(request.form['marks'])
-    time_str = request.form['time']
     priority = request.form.get('priority')
     category = request.form.get('category')
     description = request.form.get('description')
-
-    hours, minutes = map(int, time_str.split(':'))
-    total_minutes = hours * 60 + minutes
 
     subject_data = {
         'owner_id': session['user_id'],
         'subject': subject,
         'marks': marks,
-        'time_spent': total_minutes,
         'priority': priority,
         'category': category,
         'description': description,
@@ -353,22 +550,157 @@ def add_subject():
 
 
 @app.route('/update', methods=['POST'])
-def update_subject():
+def update():
     if 'user_id' not in session:
         return "Unauthorized", 401
 
     subject = request.form['subject'].lower()
     new_marks = int(request.form['marks'])
-    new_time = int(request.form['time_spent'])
     new_priority = request.form.get('priority')
     new_category = request.form.get('category')
 
     subjects_collection.update_one(
         {"subject": subject, "owner_id": session['user_id']},
-        {"$set": {"marks": new_marks, "time_spent": new_time}}
+        {"$set": {"marks": new_marks, "priority": new_priority,"category":new_category}}
     )
     return "Success", 200
 
+
+@app.route('/delete', methods=['POST'])
+def delete():
+    if 'user_id' not in session:
+        return "Unauthorized", 401
+
+    subject = request.form['subject'].lower()
+
+
+    result = subjects_collection.delete_one({
+            "subject": subject,
+            "owner_id": session['user_id']
+        })
+
+    return "Success", 200
+
+
+@app.route('/upload/<subject_id>', methods=['POST'])
+def upload_file(subject_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if 'file' not in request.files:
+        flash('No file part', 'danger')
+        return redirect(url_for('dashboard'))
+
+    file = request.files['file']
+    if file.filename == '':
+        flash('No selected file', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], session['user_id'])
+        os.makedirs(user_upload_folder, exist_ok=True)
+        file_path = os.path.join(user_upload_folder, filename)
+        file.save(file_path)
+
+        # --- THIS IS THE NEW PART ---
+        # 1. Find the subject document to get its name
+        subject_doc = subjects_collection.find_one({'_id': ObjectId(subject_id)})
+        subject_name = subject_doc.get('subject', 'Unknown Subject') if subject_doc else 'Unknown Subject'
+
+        # 2. Save the file's metadata, now including the subject_name
+        files_collection.insert_one({
+            'user_id': ObjectId(session['user_id']),
+            'subject_id': ObjectId(subject_id),
+            'subject_name': subject_name,  # <-- The new field you wanted
+            'original_filename': file.filename,
+            'secure_filename': filename,
+            'file_path': file_path,
+            'file_type': file.mimetype,
+            'upload_date': datetime.utcnow()
+        })
+        # ---------------------------
+
+
+        # Check if request came from study session
+        if request.form.get('source') == 'study_session':
+            return redirect(url_for('study_session', subject_name=subject_name))
+    else:
+        flash('File type not allowed.', 'danger')
+
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/download/<file_id>')
+def download_file(file_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    file_doc = files_collection.find_one({'_id': ObjectId(file_id), 'user_id': ObjectId(session['user_id'])})
+    if not file_doc:
+        return "File not found or access denied.", 404
+
+    # The directory is the user's specific upload folder
+    directory = os.path.join(app.config['UPLOAD_FOLDER'], session['user_id'])
+
+    # Use send_from_directory for security
+    return send_from_directory(directory=directory, path=file_doc['secure_filename'], as_attachment=False)
+
+
+# Add this new route to main.py
+@app.route('/view_file/<file_id>')
+def view_file(file_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    # Find the file metadata in the database
+    file_doc = files_collection.find_one({
+        '_id': ObjectId(file_id),
+        'user_id': ObjectId(session['user_id'])
+    })
+
+    if not file_doc:
+        # Check if request came from study session
+        if request.args.get('source') == 'study_session':
+            # Need to have file_doc before using it - redirect to dashboard if file not found
+            return redirect(url_for('dashboard'))
+        return redirect(url_for('dashboard'))
+
+    # Get the directory where the user's files are stored
+    directory = os.path.join(app.config['UPLOAD_FOLDER'], session['user_id'])
+
+    # Serve the file for inline viewing (the browser will try to open it)
+    return send_from_directory(
+        directory=directory,
+        path=file_doc['secure_filename'],
+        as_attachment=False
+    )
+
+
+@app.route('/delete_file/<file_id>', methods=['POST'])
+def delete_file(file_id):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    file_doc = files_collection.find_one({'_id': ObjectId(file_id), 'user_id': ObjectId(session['user_id'])})
+    if file_doc:
+        # Delete the physical file from the server
+        try:
+            os.remove(file_doc['file_path'])
+        except OSError as e:
+            print(f"Error deleting file {file_doc['file_path']}: {e}")
+            flash('Error deleting file from server.', 'danger')
+
+        # Delete the metadata from the database
+        files_collection.delete_one({'_id': ObjectId(file_id)})
+
+        # Check if request came from study session
+        if request.form.get('source') == 'study_session':
+            return redirect(url_for('study_session', subject_name=file_doc.get('subject_name', 'Unknown')))
+    else:
+        flash('File not found or you do not have permission to delete it.', 'danger')
+
+    return redirect(url_for('dashboard'))
 
 @app.route("/reminders", methods=["GET", "POST"])
 def reminders():
@@ -447,9 +779,20 @@ def time():
                            max_subject=max_subject,
                            min_subject=min_subject,
                            subjects=subjects)
+@app.route('/history')
+def study_history():
+    """Displays a complete history of all past study sessions."""
+    if 'user_id' not in session:
+        flash('Please log in to view your history.', 'warning')
+        return redirect(url_for('login'))
 
+    # Find all sessions for the current user and sort them by end_time (newest first)
+    user_sessions = list(sessions_collection.find(
+        {'user_id': ObjectId(session['user_id'])}
+    ).sort('end_time', -1))
 
-# In main.py
+    return render_template('history.html', sessions=user_sessions)
+
 @app.route('/add_goal_form')
 def add_goal_form():
     if 'user_id' not in session:
@@ -495,6 +838,9 @@ def add_goal():
     flash('New time-based goal has been set!', 'success')
     return redirect(url_for('dashboard'))
 
+
+
+@app.route("/todo_stats")
 @app.route("/todo_stats")
 def todo_stats():
     if 'user_id' not in session:
@@ -669,19 +1015,7 @@ def check_deadlines():
     return jsonify({"expiredTasks": expired_tasks})
 
 
-@app.route('/delete', methods=['POST'])
-def delete():
-    if 'user_id' not in session:
-        return "Unauthorized", 401
 
-    subject = request.form['subject'].lower()
-
-    subjects_collection.delete_one({
-        "subject": subject,
-        "owner_id": session['user_id']
-    })
-    user_subjects = list(subjects_collection.find({'owner_id': session['user_id']}))
-    return render_template('dashboard.html', username=session['username'], subject_collection=user_subjects)
 
 
 @app.route('/performance')
@@ -712,13 +1046,13 @@ def performance():
             y='Marks',
             title="Subject-wise Performance",
             text='Marks',
-            color_discrete_sequence=['#8A784E']
+            color_discrete_sequence=['#7E6363']
         )
         fig1.update_traces(textposition="outside")
         fig1.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
-            font_color='#3B3B1A',
+            font_color='#7E6363',
             xaxis_title="Subject",
             yaxis_title="Marks (%)"
         )
@@ -735,5 +1069,4 @@ def logout():
 
 
 if __name__ == '__main__':
-
     app.run(debug=True)
