@@ -2,11 +2,14 @@
 <html>
 <head>
     <title>Study Dashboard</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
    <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
 </head>
 
-<body>
+<body>-
+<button id="themetoggle" class="theme-toggle">🌙</button>
   <div class="dashboard">
     <div class="container">
         <!-- Header -->
@@ -26,25 +29,27 @@
                 <h2 class="panel-title">Quick Actions</h2>
 
                 <div class="btn-grid">
-                    <a href="{{ url_for('add_form') }}" class="btn btn-primary">
-                        Add Subject
-                    </a>
+    <a href="{{ url_for('add_form') }}" class="btn btn-secondary">
+         Add Subject
+    </a>
 
-                    <a href="{{ url_for('performance') }}" class="btn btn-secondary">
-                       View Performance
-                    </a>
-                    <a href="{{ url_for('time') }}" class="btn btn-secondary">
-                       Time Analytics
-                    </a>
-                    <a href="{{ url_for('study_history') }}" class="btn btn-secondary">📜 Study History</a>
-                    <button class="btn-todo" onclick="openTodoSidebar()">
-                         Todo List
-                    </button>
+    <a href="{{ url_for('add_goal_form') }}" class="btn btn-primary">
+         Set a Goal
+    </a>
 
-                </div>
+    <a href="{{ url_for('performance') }}" class="btn btn-secondary">
+        View Performance
+    </a>
+    <a href="{{ url_for('time') }}" class="btn btn-primary">
+        Time Analytics
+    </a>
+    <a href="{{ url_for('study_history') }}" class="btn btn-secondary"> Study History</a>
+    <button class="btn-todo" onclick="openTodoSidebar()">
+          Todo List
+    </button>
+</div>
             </div>
         </div>
-
 <!-- Updated Progress Dashboard Section -->
 <div class="progress-dashboard">
     <h3>Progress Overview</h3>
@@ -78,7 +83,6 @@
             <canvas id="goalChart" width="200" height="200"></canvas>
         </div>
     </div>
-
     <div class="card mt-4" style="border: none; box-shadow: none;">
             <h2 class="text-center">Active Time Goals</h2>
             {% if time_goals %}
@@ -100,7 +104,6 @@
                 <p class="text-center text-muted">No active time-based goals. <a href="{{ url_for('add_goal_form') }}">Set one now!</a></p>
             {% endif %}
         </div>
-
 </div>
 
 <!-- Chart.js Scripts -->
@@ -117,7 +120,7 @@
                 <!-- Subject Header -->
                 <div class="subject-header">
                     <!-- Subject name links to performance -->
-                   <a href="{{ url_for('study_session', subject_name=subject.subject) }}" class="subject-name">
+                   <a href="/study_session/{{ subject.subject }}" class="subject-name">
 
                         {{ subject.subject|capitalize }}
                     </a>
@@ -127,7 +130,7 @@
                             Update
                         </button>
                         <button class="btn-danger"
-                            onclick="confirmDelete('{{ subject.subject }}')">
+                            onclick="confirmDelete('{{ subject.subject }}', '{{ loop.index0 }}')">
                             Delete
                         </button>
                     </div>
@@ -138,15 +141,7 @@
                     <p><strong>Marks:</strong>
                         <span id="marks-display-{{ loop.index0 }}">{{ subject.marks }}</span>
                     </p>
-                    <p><strong>Time Spent:</strong>
-                        <span id="time-display-{{ loop.index0 }}">
-                            {% if subject.time_spent >= 60 %}
-                                {{ subject.time_spent // 60 }}h {{ subject.time_spent % 60 }}m
-                            {% else %}
-                                {{ subject.time_spent }}m
-                            {% endif %}
-                        </span>
-                    </p>
+
                     <p><strong>Priority:</strong>
                         <span id="priority{{ loop.index0 }}">{{ subject.priority }}</span>
                     </p>
@@ -158,6 +153,37 @@
                     {% endif %}
                 </div>
 
+                <div class="file-management" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+    <h5 style="margin-bottom: 10px;">Study Materials</h5>
+
+    {% if subject.files %}
+        <ul style="list-style-type: none; padding: 0;">
+            {% for file in subject.files %}
+                <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <span>📄 {{ file.original_filename }}</span>
+    <div class="file-actions" style="display: flex; gap: 5px;">
+
+        <a href="{{ url_for('view_file', file_id=file._id) }}" target="_blank" class="btn-small btn-primary">View</a>
+
+        <a href="{{ url_for('download_file', file_id=file._id) }}" class="btn-small btn-secondary">Download</a>
+
+        <form action="{{ url_for('delete_file', file_id=file._id) }}" method="POST" style="display: inline;">
+            <button type="submit" class="btn-small btn-danger">Delete</button>
+        </form>
+    </div>
+</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p style="font-size: 14px; color: var(--text-secondary); font-style: italic;">No files uploaded for this subject yet.</p>
+    {% endif %}
+
+    <form action="{{ url_for('upload_file', subject_id=subject._id) }}" method="POST" enctype="multipart/form-data" style="margin-top: 15px; display: flex; gap: 10px;">
+        <input type="file" name="file" class="form-control" required style="flex-grow: 1;">
+        <button type="submit" class="btn btn-primary">Upload</button>
+    </form>
+</div>
+
                 <!-- Update Form (hidden initially) -->
                 <div class="update-form" id="update-form-{{ loop.index0 }}" style="display: none;">
                     <div class="form-row">
@@ -165,11 +191,6 @@
                             <label>Marks:</label>
                             <input type="number" id="marks-input-{{ loop.index0 }}"
                                    value="{{ subject.marks }}" min="0" max="100" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>Time Spent (minutes):</label>
-                            <input type="number" id="time-input-{{ loop.index0 }}"
-                                   value="{{ subject.time_spent }}" min="0" class="form-control">
                         </div>
                         <div class="form-group">
                             <label>Priority:</label>
@@ -204,7 +225,7 @@
 
 <!-- ✅ Logout button is now fully OUTSIDE the loop -->
 <div class="logout-container">
-    <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+    <a href="/logout" class="logout">Logout</a>
 </div>
 
 

@@ -2,9 +2,15 @@
 <html>
 <head>
     <title>Add Subject - PathfinderAI</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+   <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+
 </head>
 <body>
+<!-- Add this to your dashboard header -->
+<button id="themetoggle" class="theme-toggle">🌙</button>
+<div class="addcard-page">
     <div class="addcard">
         <h1>Add New Subject</h1>
         <form action="/add" method="POST">
@@ -16,10 +22,7 @@
                 <label for="marks">Current Marks (%)</label>
                 <input type="number" id="marks" name="marks" required min="0" max="100">
             </div>
-            <div class="form-group">
-                <label for="time">Time Spent So Far</label>
-                <input type="time" id="time" name="time" required>
-            </div>
+
             <div class="form-group">
                <label for="priority">Choose the Priority</label>
                     <select id="priority" name="priority">
@@ -43,7 +46,7 @@
             </div>
             <button type="submit" class="btn-secondary" style="width:100%">Add Subject</button>
         </form>
-        <a href="{{ url_for('dashboard') }}" class="link">Back to Dashboard</a>
-    </div>
+        <div class="logout-container"><a href="{{ url_for('dashboard') }}" class="logout">Back to Dashboard</a> </div>
+    </div></div>
 </body>
 </html>

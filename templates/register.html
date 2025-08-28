@@ -2,10 +2,13 @@
 <html>
 <head>
     <title>Register</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+   <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
 </head>
 <body>
-
+<!-- Add this to your dashboard header -->
+<button id="themetoggle" class="theme-toggle">🌙</button>
         <div class="login-container">
              <div class="login-card">
         <h1>Register</h1>

@@ -3,64 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <title>Set a New Goal</title>
-    <style>
-        /* Basic styles to make the page look clean */
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #E7EFC7;
-            color: #3B3B1A;
-            padding: 20px;
-        }
-        .card {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(59, 59, 26, 0.2);
-            border: 2px solid #AEC8A4;
-            max-width: 600px;
-            margin: 20px auto;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-        }
-        input[type="number"],
-        select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #AEC8A4;
-            border-radius: 5px;
-            font-size: 16px;
-            background-color: #E7EFC7;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 5px;
-            background-color: #8A784E;
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-        }
-        a.link {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-            color: #8A784E;
-        }
-    </style>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+            <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+   <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+
+
 </head>
 <body>
-    <div class="card">
+<!-- Add this to your dashboard header -->
+<button id="themetoggle" class="theme-toggle">🌙</button>
+ <div class="addcard-page">
+    <div class="addcard">
         <h1>Set a Time-Based Goal</h1>
         <form action="{{ url_for('add_goal') }}" method="POST">
             <div class="form-group">
@@ -85,7 +38,7 @@
             </div>
             <button type="submit">Set Goal</button>
         </form>
-        <a href="{{ url_for('dashboard') }}" class="link">Back to Dashboard</a>
-    </div>
+        <a href="{{ url_for('dashboard') }}" class="logout">Back to Dashboard</a>
+    </div></div>
 </body>
 </html>

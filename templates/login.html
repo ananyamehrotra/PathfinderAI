@@ -2,9 +2,13 @@
 <html>
 <head>
     <title>Login</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+      <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+   <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
 </head>
 <body>
+<!-- Add this to your dashboard header -->
+<button id="themetoggle" class="theme-toggle">🌙</button>
     <div class="login-container">
         <div class="login-card">
             <h1>Login</h1>
@@ -27,9 +31,11 @@
                 <button type="submit">Login</button>
             </form>
 
-            <a href="{{ url_for('google.login') }}">
-                <button type="button" class="btn-danger">Sign in with Google</button>
-            </a><br>
+            <!-- In your existing login.html, change the Google OAuth link to: -->
+<a href="{{ url_for('google_login') }}" class="btn-danger" style="text-decoration: none; display: block; margin-top: 10px;">
+    Sign in with Google
+</a>
+
 
             <a href="/register">Don't have an account? Register</a>
         </div>

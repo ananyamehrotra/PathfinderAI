@@ -2,19 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Study Session: {{ subject_name|capitalize }}</title>
-     <link rel="stylesheet" href="{{ url_for('static', filename='css/session.css') }}">
-   <script src="{{ url_for('static', filename='js/session.js') }}" defer></script>
 
+    <title>Study Session: {{ subject_name|capitalize }}</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+     <link rel="stylesheet" href="{{ url_for('static', filename='css/session.css') }}">
+<script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
 
 
 </head>
+<!-- Add this to your dashboard header -->
+<button id="themetoggle" class="theme-toggle">🌙</button>
 <body class="focus-mode">
-    <div class="main-container">
-        <!-- Timer Section -->
-        <div class="timer-section">
-            <div class="timer-card">
-                <h2 id="session-title">Focus Session 1</h2>
+     <div class="main-container">
+        <!-- Top Section with Timer and Chart -->
+        <div class="top-section">
+            <!-- Timer Section -->
+            <div class="timer-section">
+                <div class="timer-card">
+<h2 id="session-title">Focus Session 1</h2>
                 <h1 id="subject-title">{{ subject_name|capitalize }}</h1>
 
                 <div id="timer-display" class="editable" contenteditable="true" oninput="updateBreakInfo()">25:00</div>
@@ -31,20 +36,92 @@
                     <button id="stop-btn">End & Save</button>
                 </div>
                 <p id="status-text">Click the time to edit, then press 'Start'.</p>
+                </div>
+            </div>
+
+            <!-- Chart Section -->
+            <div class="chart-section">
+                <div class="chart-card">
+                    <div id="chart-container">
+                        <!-- Chart will be rendered here -->
+                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary); font-style: italic;">
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Chart Section -->
-        <div class="chart-section">
-            <div class="chart-card">
-                <h3>Weekly Progress - {{ subject_name|capitalize }}</h3>
-                <div id="chart-container"></div>
+        <!-- Heatmap Section -->
+        <div class="heatmap-section">
+            <div class="heatmap-card">
+                <h3>{{ subject_name|capitalize }} - Productive hours this week</h3>
+                <div class="heatmap-container">
+                    <canvas id="weeklyHeatmap"></canvas>
+                </div>
             </div>
         </div>
-    </div>
+         <div class="summary-card">
+<!-- Files section -->
+<div class="files-section">
+  <h4>Files for {{ subject.name }}</h4>
 
-    <!-- Load Plotly from CDN -->
+  <!-- Upload form -->
+  <div class="upload-form">
+    <form action="{{ url_for('upload_file', subject_id=subject._id) }}" method="POST" enctype="multipart/form-data">
+      <div class="upload-form-inner">
+        <input type="file" name="file" required accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.docx,.pptx">
+          <input type="hidden" name="source" value="study_session">
+        <button type="submit" class="btn-upload">Upload File</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Show existing files -->
+  <div class="files-list">
+    <h5>Uploaded Files</h5>
+    {% if subject.files %}
+      <div class="files-grid">
+        {% for f in subject.files %}
+          {% set file_ext = (f.original_filename or f.filename).split('.')[-1].lower() %}
+          <div class="file-item">
+            <div class="file-info">
+              <div class="file-icon {{ file_ext if file_ext in ['pdf', 'doc', 'docx', 'txt', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx'] else 'default' }}"></div>
+              <div class="file-details">
+                <div class="file-name">{{ f.original_filename or f.filename }}</div>
+                <div class="file-date">{{ f.upload_date.strftime('%B %d, %Y') if f.upload_date else 'Unknown date' }}</div>
+              </div>
+            </div>
+            <div class="file-actions" style="display: flex; gap: 5px;">
+             <a href="{{ url_for('view_file', file_id=f._id) }}?source=study_session" class="btn-small btn-secondary">View</a>
+
+<a href="{{ url_for('download_file', file_id=f._id) }}?source=study_session" class="btn-small btn-secondary">Download</a>
+
+<form action="{{ url_for('delete_file', file_id=f._id) }}" method="POST" style="display: inline;">
+    <input type="hidden" name="source" value="study_session">
+    <button type="submit" class="btn-small btn-danger">Delete</button>
+</form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="no-files-message">
+        <p>No files uploaded yet for this subject.<br>Upload your first file using the form above!</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+         </div>
+</div>
+
+        <div class="logout-container">
+          <a href="{{ url_for('dashboard') }}" class="btn-logout">Back to Dashboard</a>
+        </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
 
     <script>
         // --- DOM Elements ---
@@ -318,6 +395,137 @@
                 this.contentEditable = false;
             }
         });
+    </script>
+
+    <script>
+      // Fixed heatmap rendering code
+      document.addEventListener('DOMContentLoaded', function() {
+          // Wait for Chart.js and matrix plugin to load
+          if (typeof Chart === 'undefined') {
+              console.error('Chart.js not loaded');
+              return;
+          }
+
+          // Get current theme for colors
+          const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+
+          const productiveHours = {{ productive_hours | tojson }};
+          const hours = [...Array(24).keys()];
+
+          // Convert into Chart.js matrix data format
+          const matrixData = hours.map((hour) => {
+              return {
+                  x: hour,
+                  y: 0, // Single row
+                  v: productiveHours[String(hour).padStart(2, "0")] || 0
+              };
+          });
+
+          const ctx = document.getElementById("weeklyHeatmap");
+          if (!ctx) {
+              console.error('Canvas element not found');
+              return;
+          }
+
+          try {
+    new Chart(ctx, {
+        type: "matrix",
+        data: {
+            datasets: [{
+                label: "Study Hours",
+                data: matrixData,
+                backgroundColor: function(ctx) {
+                    const value = ctx.dataset.data[ctx.dataIndex].v;
+                    if (value === 0) {
+                        // Empty slot color
+                        return isDarkMode ? 'rgba(57,62,70,0.3)' : 'rgba(231,239,199,0.5)';
+                    }
+                    // Calculate intensity based on max value
+                    const maxValue = Math.max(...matrixData.map(d => d.v), 1);
+                    const intensity = value / maxValue;
+                    if (isDarkMode) {
+                        // Dark Mode Heatmap (shades of deep red)
+                        return `rgba(102,11,5,${0.3 + intensity * 0.7})`;  // #660B05 with intensity
+                    } else {
+                        // Light Mode Heatmap (shades of deep red)
+                        return `rgba(102,11,5,${0.3 + intensity * 0.7})`;  // same color family
+                    }
+
+                },
+                borderColor: isDarkMode ? '#3F4F44' : '#AEC8A4',
+                borderWidth: 1,
+                width: function({chart}) {
+                    return Math.max(20, (chart.chartArea || {width: 1000}).width / 24 - 1);
+                },
+                height: function({chart}) {
+                    return Math.max(80, (chart.chartArea || {height: 120}).height - 10);
+                }
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: "linear",
+                    position: "bottom",
+                    min: -0.5,
+                    max: 23.5,
+                    ticks: {
+                        stepSize: 2,
+                        callback: function(value) {
+                            return String(Math.round(value)).padStart(2,'0') + ':00';
+                        },
+                        color: isDarkMode ? '#948979' : '#3B3B1A',
+                        font: { size: 10 }
+                    },
+                    grid: { display: false }
+                },
+                y: {
+                    type: "linear",
+                    min: -0.5,
+                    max: 0.5,
+                    ticks: { display: false },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function(tooltipItems) {
+                            const hour = Math.round(tooltipItems[0].parsed.x);
+                            return `${String(hour).padStart(2,'0')}:00 - ${String(hour + 1).padStart(2,'0')}:00`;
+                        },
+                        label: function(context) {
+                            const minutes = context.dataset.data[context.dataIndex].v;
+                            return `${minutes} minutes studied`;
+                        }
+                    },
+                    backgroundColor: isDarkMode ? '#18230F' : '#E7EFC7',
+                    titleColor: isDarkMode ? '#948979' : '#3B3B1A',
+                    bodyColor: isDarkMode ? '#E7EFC7' : '#3B3B1A',
+                }
+            },
+            layout: {
+                padding: { top: 10, bottom: 10, left: 10, right: 10 }
+            }
+        }
+    });
+}
+
+          catch (error) {
+              console.error('Error creating heatmap chart:', error);
+              // Fallback: show a simple message
+              const canvas = document.getElementById("weeklyHeatmap");
+              canvas.style.display = 'none';
+              const fallback = document.createElement('p');
+              fallback.textContent = 'Heatmap visualization unavailable';
+              fallback.style.textAlign = 'center';
+              fallback.style.color = '#666';
+              canvas.parentNode.insertBefore(fallback, canvas.nextSibling);
+          }
+      });
     </script>
 </body>
 </html>

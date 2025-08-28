@@ -2,6 +2,10 @@
 <html>
 <head>
     <title>Performance Dashboard</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+   <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
         body { background-color: #E7EFC7; font-family: Arial; }
@@ -12,11 +16,15 @@
     </style>
 </head>
 <body>
-    <div class="chart">
+<!-- Add this to your dashboard header -->
+<button id="themetoggle" class="theme-toggle">🌙</button>
+  <div class="dashboard">
+    <div class="container">
+    <div class="chartt">
         {{ chart1|safe }}
     </div>
+<div class="summary-card">
 
-    <div class="list">
         <h3>Subjects</h3>
         {% for subject in subjects %}
         <div class="item">
@@ -24,5 +32,6 @@
         </div>
         {% endfor %}
     </div>
+    </div><div class="logout-container"><a href="{{ url_for('dashboard') }}" class="logout">Back to Dashboard</a> </div></div>
 </body>
 </html>

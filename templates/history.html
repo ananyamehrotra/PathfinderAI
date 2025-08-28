@@ -3,53 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <title>Study History</title>
-    <style>
-        /* Basic styles to make the page look clean */
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #E7EFC7;
-            color: #3B3B1A;
-            padding: 20px;
-        }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-        .card {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(59, 59, 26, 0.2);
-            border: 2px solid #AEC8A4;
-        }
-        .history-item {
-            background: #E7EFC7;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 15px;
-            border-left: 4px solid #AEC8A4;
-        }
-        h1, h3 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        p { margin: 5px 0; }
-        a.btn {
-            display: inline-block;
-            text-decoration: none;
-            background-color: #8A784E;
-            color: white;
-            padding: 12px 24px;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
-        .text-center { text-align: center; }
-        .mt-4 { margin-top: 2rem; }
-    </style>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+   <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+
+
 </head>
 <body>
+<!-- Add this to your dashboard header -->
+<button id="themetoggle" class="theme-toggle">🌙</button>
     <div class="container">
-        <div class="card">
+       <div class="summary-card">
             <h1>Study Session History</h1>
 
             {% if sessions %}
@@ -57,7 +21,7 @@
                     <div class="history-item">
                         <h3>{{ session.subject_name|capitalize }}</h3>
                         <p><strong>Week of:</strong> {{ session.week_start }}</p>
-                        
+
                         {% set total_seconds = session.get('mon', 0) + session.get('tue', 0) + session.get('wed', 0) + session.get('thu', 0) + session.get('fri', 0) + session.get('sat', 0) + session.get('sun', 0) %}
                         {% set hours = total_seconds // 3600 %}
                         {% set minutes = (total_seconds % 3600) // 60 %}
@@ -68,9 +32,9 @@
             {% else %}
                 <p class="text-center">No study history found.</p>
             {% endif %}
-            
+
             <div class="text-center mt-4">
-                <a href="{{ url_for('dashboard') }}" class="btn">Back to Dashboard</a>
+                <div class="logout-container"><a href="{{ url_for('dashboard') }}" class="logout">Back to Dashboard</a> </div>
             </div>
         </div>
     </div>
